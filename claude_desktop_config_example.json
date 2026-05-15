@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "legal-advisor": {
+      "command": "C:\\Users\\admin\\ProITBridge\\Legal-AI-advisor\\backend\\venv\\Scripts\\python.exe",
+      "args": [
+        "C:\\Users\\admin\\ProITBridge\\Legal-AI-advisor\\backend\\mcp_legal_server.py"
+      ],
+      "env": {
+        "PYTHONUNBUFFERED": "1"
+      }
+    }
+  }
+}
