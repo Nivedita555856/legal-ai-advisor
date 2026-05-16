@@ -4,7 +4,7 @@ services:
     env: python
     region: oregon
     plan: starter
-    buildCommand: pip install -r requirements.txt && python -c "import nltk; nltk.download('punkt'); nltk.download('stopwords')"
+    buildCommand: pip install -r requirements.txt && python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2'); print('Model cached')" && python -c "import nltk; nltk.download('punkt'); nltk.download('stopwords')"
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT --workers 1
     envVars:
       - key: SUPABASE_URL
@@ -46,3 +46,4 @@ services:
       - key: MCTS_ITERATIONS
         value: "100"
     healthCheckPath: /
+
