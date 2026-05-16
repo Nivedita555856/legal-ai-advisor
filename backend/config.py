@@ -22,10 +22,15 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     claude_model: str = "claude-sonnet-4-6"
 
-    # Embedding model (local, no API key needed)
+    # Embedding model (local)
     embedding_model: str = "all-MiniLM-L6-v2"
+    embedding_dimension: int = 384
 
-    # Neo4j — loaded from .env
+    # OpenAI (embeddings fallback)
+    openai_api_key: str = ""
+    openai_embedding_model: str = "text-embedding-3-small"
+
+    # Neo4j
     neo4j_uri: str = ""
     neo4j_user: str = "neo4j"
     neo4j_password: str = ""
@@ -38,7 +43,6 @@ class Settings(BaseSettings):
     similarity_threshold: float = 0.7
     chunk_size: int = 1000
     chunk_overlap: int = 200
-    embedding_dimension: int = 384
 
     # Parent-Child RAG
     child_chunk_size: int = 200

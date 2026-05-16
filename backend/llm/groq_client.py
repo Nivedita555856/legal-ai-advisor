@@ -16,11 +16,8 @@ def get_embedder():
 
 
 class GroqClient:
-    """Unified LLM client supporting Groq and Claude, with local embeddings."""
-
     def __init__(self):
         self.provider = settings.llm_provider.lower()
-        self.api_key = ""
         self._client = None
         self._setup()
 
@@ -30,10 +27,8 @@ class GroqClient:
                 import anthropic
                 self._client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
                 self.model = settings.claude_model
-                self.api_key = settings.anthropic_api_key
                 logger.info(f"LLM: Claude ({self.model})")
             except ImportError:
-                logger.warning("anthropic package not installed, falling back to Groq")
                 self.provider = "groq"
                 self._setup_groq()
         else:
@@ -43,7 +38,6 @@ class GroqClient:
         from groq import Groq
         self._client = Groq(api_key=settings.groq_api_key)
         self.model = settings.groq_model
-        self.api_key = settings.groq_api_key
         logger.info(f"LLM: Groq ({self.model})")
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
@@ -61,7 +55,7 @@ class GroqClient:
             model=self.model,
             messages=[
                 {"role": "system", "content": "You are an Indian legal document analyst. Write in plain English without markdown formatting."},
-                {"role": "user", "content": prompt}
+                {"role": "user", "content": prompt},
             ],
             temperature=temperature,
             max_tokens=max_tokens,
