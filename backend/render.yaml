@@ -47,3 +47,4 @@ services:
         value: "100"
     healthCheckPath: /
 
+
