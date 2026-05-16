@@ -1,145 +1,101 @@
 """
-upload_docs.py — Upload all legal documents to the deployed backend.
-Run from the project root:
-    python upload_docs.py
+Upload all legal documents to the deployed Render backend.
+Run: python upload_docs.py
 """
+import os, sys, time
 
-import os
-import sys
-import time
-import requests
+try:
+    import requests
+except ImportError:
+    print("Installing requests...")
+    os.system(f"{sys.executable} -m pip install requests -q")
+    import requests
 
-# ── Configuration ──────────────────────────────────────────────────────────────
-BACKEND_URL = "https://legal-ai-advisor-sspd.onrender.com"
-DATA_DIR    = os.path.join(os.path.dirname(__file__), "data", "raw")
-TIMEOUT     = 120   # seconds per request (Render cold start can be slow)
+BACKEND = "https://legal-ai-advisor-sspd.onrender.com/api"
+DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "raw")
 
-# ── Helpers ────────────────────────────────────────────────────────────────────
-
-def wake_backend(max_wait: int = 120) -> bool:
-    """Hit the health endpoint and wait until the server responds."""
-    print(f"Waking backend at {BACKEND_URL} ...")
-    health_url = f"{BACKEND_URL}/api/health"
-    deadline = time.time() + max_wait
-    attempt = 0
-    while time.time() < deadline:
-        attempt += 1
+def wake(max_seconds=90):
+    print("Checking backend...", end=" ", flush=True)
+    for _ in range(max_seconds // 10):
         try:
-            r = requests.get(health_url, timeout=30)
+            r = requests.get(f"{BACKEND}/health", timeout=15)
             if r.status_code == 200:
-                print(f"  Backend is up! (attempt {attempt})")
+                print("UP")
                 return True
-            else:
-                print(f"  Attempt {attempt}: HTTP {r.status_code} — retrying...")
-        except requests.exceptions.ConnectionError:
-            print(f"  Attempt {attempt}: connection refused — server may be starting...")
-        except requests.exceptions.Timeout:
-            print(f"  Attempt {attempt}: timed out — still waiting...")
-        except Exception as e:
-            print(f"  Attempt {attempt}: error — {e}")
+        except Exception:
+            pass
+        print(".", end="", flush=True)
         time.sleep(10)
+    print("\nBackend not responding.")
     return False
 
-
-def upload_file(fpath: str) -> bool:
-    """Upload a single file; return True on success."""
-    fname = os.path.basename(fpath)
-    url   = f"{BACKEND_URL}/api/upload"
-    try:
-        with open(fpath, "rb") as fh:
-            r = requests.post(
-                url,
-                files={"file": (fname, fh, "text/plain")},
-                data={"doc_name": fname},
-                timeout=TIMEOUT,
-            )
-        if r.status_code == 200:
-            data = r.json()
-            chunks = data.get("chunks", "?")
-            print(f"  OK  — {fname} ({chunks} chunks)")
-            return True
-        else:
-            print(f"  FAIL — {fname}: HTTP {r.status_code}: {r.text[:200]}")
-            return False
-    except requests.exceptions.Timeout:
-        print(f"  FAIL — {fname}: request timed out after {TIMEOUT}s")
-        return False
-    except Exception as e:
-        print(f"  FAIL — {fname}: {e}")
-        return False
-
-
-# ── Main ───────────────────────────────────────────────────────────────────────
+def upload(path, name):
+    with open(path, "rb") as f:
+        content = f.read()
+    resp = requests.post(
+        f"{BACKEND}/upload",
+        files={"file": (name, content, "text/plain")},
+        data={"doc_name": name},
+        timeout=120,
+    )
+    return resp
 
 def main():
-    # 1. Collect files
-    supported = {".pdf", ".txt", ".md"}
-    if not os.path.isdir(DATA_DIR):
-        print(f"ERROR: data directory not found: {DATA_DIR}")
-        sys.exit(1)
-
     files = sorted([
-        os.path.join(DATA_DIR, f)
-        for f in os.listdir(DATA_DIR)
-        if os.path.splitext(f)[1].lower() in supported
+        f for f in os.listdir(DATA_DIR)
+        if f.endswith((".md", ".txt", ".pdf"))
     ])
-
     if not files:
-        print("No files found in data/raw/")
+        print(f"No files found in {DATA_DIR}")
         sys.exit(1)
 
-    print(f"\nFound {len(files)} document(s) to upload:")
-    for f in files:
-        print(f"  - {os.path.basename(f)}")
-    print()
-
-    # 2. Wake the backend first
-    if not wake_backend(max_wait=120):
-        print("\nERROR: Backend did not respond within 120 seconds.")
-        print("Check your Render dashboard — the service may have an error.")
+    print(f"Found {len(files)} files to upload\n")
+    if not wake():
         sys.exit(1)
 
-    print()
-
-    # 3. Upload each file
-    ok   = 0
-    fail = 0
-    for i, fpath in enumerate(files, 1):
-        print(f"[{i}/{len(files)}] Uploading {os.path.basename(fpath)} ...", end=" ", flush=True)
-        # Brief pause between uploads so Render doesn't get overloaded
-        if i > 1:
-            time.sleep(2)
-        if upload_file(fpath):
-            ok += 1
-        else:
+    ok = fail = 0
+    for i, fname in enumerate(files, 1):
+        fpath = os.path.join(DATA_DIR, fname)
+        print(f"[{i}/{len(files)}] {fname} ... ", end="", flush=True)
+        try:
+            r = upload(fpath, fname)
+            if r.status_code == 200:
+                data = r.json()
+                print(f"OK ({data.get('chunks','?')} chunks)")
+                ok += 1
+            else:
+                print(f"FAILED ({r.status_code}): {r.text[:120]}")
+                fail += 1
+        except Exception as e:
+            print(f"ERROR: {e}")
             fail += 1
+        time.sleep(0.5)
 
-    # 4. Summary
-    print(f"\n{'='*50}")
-    print(f"Upload complete: {ok} succeeded, {fail} failed")
+    print(f"\nDone: {ok} uploaded, {fail} failed")
 
     if ok > 0:
-        # Verify via stats
-        print("\nVerifying vector store ...")
+        print("\nVerifying...")
         try:
-            r = requests.get(f"{BACKEND_URL}/api/documents/stats", timeout=30)
-            if r.status_code == 200:
-                stats = r.json().get("stats", {})
-                total = stats.get("total_vector_count", "unknown")
-                print(f"  Pinecone now has {total} vectors")
-            docs_r = requests.get(f"{BACKEND_URL}/api/documents", timeout=30)
-            if docs_r.status_code == 200:
-                count = docs_r.json().get("count", "?")
-                print(f"  Supabase has {count} document records")
+            stats = requests.get(f"{BACKEND}/documents/stats", timeout=20).json()
+            docs  = requests.get(f"{BACKEND}/documents", timeout=20).json()
+            print(f"  Pinecone vectors : {stats.get('stats',{}).get('total_vector_count','?')}")
+            print(f"  Supabase records : {docs.get('count','?')}")
         except Exception as e:
             print(f"  Could not verify: {e}")
 
-    if fail == 0:
-        print("\nAll documents uploaded successfully!")
-        print("Your app is ready — visit the frontend and ask a legal question.")
-    else:
-        print(f"\n{fail} file(s) failed. Re-run this script to retry.")
-
+        print("\nRunning test query...")
+        try:
+            r = requests.post(
+                f"{BACKEND}/query",
+                json={"query": "What is the notice period in an employment contract in India?", "jurisdiction": "India"},
+                timeout=120,
+            )
+            d = r.json()
+            ans = d.get("answer", "")
+            print(f"\nAnswer preview:\n{ans[:400]}...")
+            print(f"\nRisk: {d.get('risk_score', {})}")
+        except Exception as e:
+            print(f"  Query failed: {e}")
 
 if __name__ == "__main__":
     main()
