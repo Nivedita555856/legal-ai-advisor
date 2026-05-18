@@ -61,8 +61,4 @@ class Settings(BaseSettings):
     # CORS
     allowed_origins: str = "*"
 
-    class Config:
-        env_file = ".env"
-        extra = "ignore"
-
-settings = Settings()
+    clas

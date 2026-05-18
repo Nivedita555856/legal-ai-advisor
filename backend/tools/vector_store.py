@@ -8,15 +8,15 @@ _embedder = None
 def get_embedder():
     global _embedder
     if _embedder is None:
-        from sentence_transformers import SentenceTransformer
-        _embedder = SentenceTransformer(settings.embedding_model)
-        logger.info(f"Loaded embedding model: {settings.embedding_model}")
+        from fastembed import TextEmbedding
+        _embedder = TextEmbedding("sentence-transformers/all-MiniLM-L6-v2")
+        logger.info("Loaded fastembed model: all-MiniLM-L6-v2 (ONNX, ~80MB)")
     return _embedder
 
 def embed_text(text: str) -> List[float]:
     try:
-        vec = get_embedder().encode(text[:512], normalize_embeddings=True)
-        return vec.tolist()
+        embeddings = list(get_embedder().embed([text[:512]]))
+        return embeddings[0].tolist()
     except Exception as e:
         logger.error(f"Embedding error: {e}")
         return [0.0] * settings.embedding_dimension
@@ -52,7 +52,9 @@ class VectorStore:
         if not self.index:
             return
         try:
-            self.index.upsert(vectors=vectors)
+            batch_size = 100
+            for i in range(0, len(vectors), batch_size):
+                self.index.upsert(vectors=vectors[i:i + batch_size])
         except Exception as e:
             logger.error(f"Pinecone upsert error: {e}")
 
@@ -88,6 +90,14 @@ class VectorStore:
         except Exception as e:
             logger.error(f"Stats error: {e}")
             return {}
+
+    def delete_all(self):
+        if not self.index:
+            return
+        try:
+            self.index.delete(delete_all=True)
+        except Exception as e:
+            logger.error(f"Clear error: {e}")
 
     def delete_by_doc_id(self, doc_id: str):
         if not self.index:

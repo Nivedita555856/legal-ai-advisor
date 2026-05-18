@@ -2,7 +2,6 @@ from loguru import logger
 from tenacity import retry, stop_after_attempt, wait_exponential
 from typing import List, Dict
 import json
-
 from config import settings
 
 _embedder = None
@@ -10,8 +9,8 @@ _embedder = None
 def get_embedder():
     global _embedder
     if _embedder is None:
-        from sentence_transformers import SentenceTransformer
-        _embedder = SentenceTransformer(settings.embedding_model)
+        from fastembed import TextEmbedding
+        _embedder = TextEmbedding("sentence-transformers/all-MiniLM-L6-v2")
     return _embedder
 
 
@@ -66,10 +65,8 @@ class GroqClient:
         import asyncio
         def _call():
             return self._client.messages.create(
-                model=self.model,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                system="You are an Indian legal document analyst. Write in plain English without markdown formatting, bold text, or emojis.",
+                model=self.model, max_tokens=max_tokens, temperature=temperature,
+                system="You are an Indian legal document analyst. Write in plain English without markdown formatting.",
                 messages=[{"role": "user", "content": prompt}],
             )
         response = await asyncio.to_thread(_call)
@@ -77,16 +74,16 @@ class GroqClient:
 
     async def embed(self, text: str) -> List[float]:
         try:
-            vec = get_embedder().encode(text[:512], normalize_embeddings=True)
-            return vec.tolist()
+            embeddings = list(get_embedder().embed([text[:512]]))
+            return embeddings[0].tolist()
         except Exception as e:
             logger.error(f"Embedding error: {e}")
             return [0.0] * settings.embedding_dimension
 
     async def embed_batch(self, texts: List[str]) -> List[List[float]]:
         try:
-            vecs = get_embedder().encode(texts, normalize_embeddings=True)
-            return [v.tolist() for v in vecs]
+            embeddings = list(get_embedder().embed([t[:512] for t in texts]))
+            return [e.tolist() for e in embeddings]
         except Exception as e:
             logger.error(f"Batch embedding error: {e}")
             return [[0.0] * settings.embedding_dimension for _ in texts]
