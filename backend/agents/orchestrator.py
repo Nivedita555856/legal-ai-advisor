@@ -194,42 +194,78 @@ class LegalOrchestrator:
 
     async def synthesize_final(self, state):
         logger.info("Synthesizing final answer...")
-        summary = state.get("autogen_analysis", {}).get("summary", "N/A")
         risk = state.get("risk_score", {})
         is_scenario = self._is_scenario_based(state["query"])
+        chunks = state.get("retrieved_chunks", [])
 
+        # Build rich context directly from retrieved chunks (not truncated summary)
+        context_parts = []
+        for i, c in enumerate(chunks[:6]):
+            doc = c.get("document", "Unknown Document")
+            text = c.get("text", "").strip()
+            score = round(c.get("combined_score", c.get("score", 0)), 3)
+            src_type = c.get("source_type", "vector")
+            if text:
+                context_parts.append(
+                    f"[Source {i+1}: {doc} | type={src_type} | relevance={score}]\n{text[:800]}"
+                )
+
+        context = "\n\n".join(context_parts) if context_parts else "No relevant documents retrieved."
+
+        # Also include autogen deep analysis if available
+        autogen_summary = state.get("autogen_analysis", {}).get("summary", "")
+        if autogen_summary and autogen_summary != "Analysis unavailable. Please try again.":
+            context += f"\n\nDeep Analysis:\n{autogen_summary[:600]}"
+
+        contradictions = state.get("contradictions", [])
+        contra_text = ""
+        if contradictions:
+            contra_text = f"\nContradictions found: {len(contradictions)} clause conflict(s) detected."
+
+        risk_line = ""
         if is_scenario:
-            risk_section = f"\nRisk Level: {risk.get('level', 'MEDIUM')} ({risk.get('score', 50)}/100)\n"
-        else:
-            risk_section = ""
+            risk_line = f"\nRisk Assessment: {risk.get('level','MEDIUM')} ({risk.get('score',50)}/100) — {risk.get('recommendation','Review recommended.')}"
 
-        prompt = f"""You are an expert Indian legal awareness advisor. Answer in plain English.
-Do not use asterisks, markdown, or emojis. Write in clear numbered paragraphs.
+        prompt = f"""You are an expert Indian legal advisor with deep knowledge of Indian law, statutes, and case law.
+Answer in plain English only. Do not use asterisks, bullet symbols, bold markers, or emojis.
+Use clear numbered sections. Be specific, accurate, and cite the exact source documents provided.
 
-Query: {state["query"]}
+QUERY: {state["query"]}
 
-Relevant legal content from documents:
-{summary[:700]}
-{risk_section}
-Structure your answer as follows:
+RETRIEVED LEGAL DOCUMENTS AND CONTEXT:
+{context}
+{contra_text}{risk_line}
 
-1. DIRECT ANSWER: Answer the query immediately with the specific section, clause, or article name.
+IMPORTANT: Base your answer on the source documents above. Quote specific clauses, sections, and document names.
+If a document directly addresses the query, cite it explicitly (e.g., "As per Section 3 of the NDA document...").
 
-2. LEGAL BASIS: Cite the exact law, section number, and what it says. Example: "Section 27, Indian Contract Act 1872 states..."
+Provide a complete structured answer:
 
-3. CASE LAW: Mention one relevant court judgment if applicable. Example: "The Supreme Court in [Case Name] (Year) held that..."
+1. DIRECT ANSWER
+Give the specific answer citing the exact clause, section, or article from the source documents above.
+Quote the relevant text if it directly answers the question.
 
-4. ACTIONABLE STEP: Tell the person exactly what to do next. Be specific (e.g., "File an FIR at your local police station", "Call 1930 for cyber fraud").
+2. LEGAL BASIS
+State the exact law or section that applies. Example: "Under Section 27 of the Indian Contract Act, 1872..."
+Reference the source document names from the context above.
 
-5. WHERE TO VERIFY: Provide one relevant link such as https://indiankanoon.org, https://cybercrime.gov.in, https://consumerhelpline.gov.in, https://nalsa.gov.in, or the relevant government portal.
+3. RELEVANT CASE LAW
+Cite one applicable Supreme Court or High Court judgment with year if applicable.
 
-{("6. RISK LEVEL: " + risk.get("level","MEDIUM") + " - " + risk.get("recommendation","Review recommended.")) if is_scenario else ""}
+4. WHAT TO DO NOW
+Give exact actionable steps the person should take. Be specific with phone numbers, websites, or offices.
 
-Note: This is for informational purposes only and does not constitute legal advice. Please consult a qualified lawyer for specific guidance.
+5. VERIFICATION LINK
+Give the most relevant link: indiankanoon.org, cybercrime.gov.in, consumerhelpline.gov.in, nalsa.gov.in, labour.gov.in, or similar.
+
+6. CONFIDENCE
+State how directly the source documents address this query (High/Medium/Low) and why.
+
+Note: This is legal awareness information only, not legal advice. Consult a qualified lawyer for your specific situation.
 
 Answer:"""
 
-        final = await self.llm.generate(prompt, temperature=0.1, max_tokens=1024)
+        final = await self.llm.generate(prompt, temperature=0.1, max_tokens=1500)
         validated = self.guardrails.validate_output(final)
         state["final_answer"] = validated["answer"]
         return state
