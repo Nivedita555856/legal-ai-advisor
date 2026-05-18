@@ -4,14 +4,24 @@ from typing import List, Dict
 import json
 from config import settings
 
-_embedder = None
 
-def get_embedder():
-    global _embedder
-    if _embedder is None:
-        from fastembed import TextEmbedding
-        _embedder = TextEmbedding("BAAI/bge-small-en-v1.5")
-    return _embedder
+def embed_text(text: str) -> List[float]:
+    try:
+        import requests as _req
+        url = (
+            f"https://generativelanguage.googleapis.com/v1beta/models/"
+            f"{settings.embedding_model}:embedContent?key={settings.gemini_api_key}"
+        )
+        payload = {
+            "content": {"parts": [{"text": text[:8000]}]},
+            "outputDimensionality": settings.embedding_dimension,
+        }
+        r = _req.post(url, json=payload, timeout=30)
+        r.raise_for_status()
+        return r.json()["embedding"]["values"]
+    except Exception as e:
+        logger.error(f"Embedding error: {e}")
+        return [0.0] * settings.embedding_dimension
 
 
 class GroqClient:
@@ -73,20 +83,10 @@ class GroqClient:
         return response.content[0].text if response.content else ""
 
     async def embed(self, text: str) -> List[float]:
-        try:
-            embeddings = list(get_embedder().embed([text[:512]]))
-            return embeddings[0].tolist()
-        except Exception as e:
-            logger.error(f"Embedding error: {e}")
-            return [0.0] * settings.embedding_dimension
+        return embed_text(text)
 
     async def embed_batch(self, texts: List[str]) -> List[List[float]]:
-        try:
-            embeddings = list(get_embedder().embed([t[:512] for t in texts]))
-            return [e.tolist() for e in embeddings]
-        except Exception as e:
-            logger.error(f"Batch embedding error: {e}")
-            return [[0.0] * settings.embedding_dimension for _ in texts]
+        return [embed_text(t) for t in texts]
 
     async def assess_risks(self, query: str, chunks: List[Dict]) -> Dict:
         context = "\n".join([c.get("text", "")[:200] for c in chunks[:2]])
