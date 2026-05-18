@@ -226,42 +226,55 @@ class LegalOrchestrator:
         if is_scenario:
             risk_line = f"\nRisk Assessment: {risk.get('level','MEDIUM')} ({risk.get('score',50)}/100) — {risk.get('recommendation','Review recommended.')}"
 
-        prompt = f"""You are an expert Indian legal advisor with deep knowledge of Indian law, statutes, and case law.
-Answer in plain English only. Do not use asterisks, bullet symbols, bold markers, or emojis.
-Use clear numbered sections. Be specific, accurate, and cite the exact source documents provided.
+        prompt = f"""You are a senior Indian legal advisor with expertise in Indian statutes, case law, and legal procedures.
+Write in plain English. No asterisks, no bullet symbols, no bold markers, no emojis. Use numbered sections only.
+Be highly specific — cite exact section numbers, act names, court names, form numbers, office names, and deadlines.
 
 QUERY: {state["query"]}
 
-RETRIEVED LEGAL DOCUMENTS AND CONTEXT:
+RETRIEVED LEGAL DOCUMENTS:
 {context}
 {contra_text}{risk_line}
 
-IMPORTANT: Base your answer on the source documents above. Quote specific clauses, sections, and document names.
-If a document directly addresses the query, cite it explicitly (e.g., "As per Section 3 of the NDA document...").
-
-Provide a complete structured answer:
+Write a comprehensive legal guidance response with these exact sections:
 
 1. DIRECT ANSWER
-Give the specific answer citing the exact clause, section, or article from the source documents above.
-Quote the relevant text if it directly answers the question.
+Answer the query immediately with the specific law, section, or clause that directly applies.
+If the source documents above contain relevant text, quote it verbatim with the document name.
+Example: "As per Clause 5.2 of the Employment Contract document: [exact quote]"
 
-2. LEGAL BASIS
-State the exact law or section that applies. Example: "Under Section 27 of the Indian Contract Act, 1872..."
-Reference the source document names from the context above.
+2. APPLICABLE LAW AND SECTIONS
+List every relevant Indian law that applies with exact section numbers.
+Example: "Section 25F of the Industrial Disputes Act, 1947 requires one month notice."
+"Section 44 of the Indian Contract Act, 1872 governs contractual notice periods."
+Include the year of the Act and what each section specifically says.
 
-3. RELEVANT CASE LAW
-Cite one applicable Supreme Court or High Court judgment with year if applicable.
+3. SCENARIO ANALYSIS
+{"Analyze this specific scenario step by step. Identify what rights have been violated, who is at fault, and what remedies are available." if is_scenario else "Explain how this law applies in practice with a typical scenario."}
+Be specific about timelines, amounts, and entitlements.
 
-4. WHAT TO DO NOW
-Give exact actionable steps the person should take. Be specific with phone numbers, websites, or offices.
+4. STEP-BY-STEP LEGAL PROCEDURE
+Give the exact procedure a person must follow, in numbered steps:
+Step 1: [First action — be specific about form number, office, deadline]
+Step 2: [Second action — include contact details where relevant]
+Step 3: [Escalation if Step 1 fails]
+Include: which authority to approach, what documents to carry, deadlines, fees if any.
 
-5. VERIFICATION LINK
-Give the most relevant link: indiankanoon.org, cybercrime.gov.in, consumerhelpline.gov.in, nalsa.gov.in, labour.gov.in, or similar.
+5. RELEVANT CASE LAW
+Cite one or two Supreme Court or High Court judgments that directly apply.
+Format: "In [Case Name] vs [Respondent], [Year], the [Court] held that [specific ruling]."
 
-6. CONFIDENCE
-State how directly the source documents address this query (High/Medium/Low) and why.
+6. IF THE OTHER PARTY DOES NOT COMPLY
+Explain legal consequences they face — penalties, fines, imprisonment under specific sections.
 
-Note: This is legal awareness information only, not legal advice. Consult a qualified lawyer for your specific situation.
+7. WHERE TO FILE AND VERIFY
+Name the exact office, tribunal, or online portal.
+Provide the specific URL: use indiankanoon.org, labour.gov.in, consumerhelpline.gov.in, cybercrime.gov.in, nalsa.gov.in, or the exact government portal.
+
+8. TIMELINE AND EXPECTED OUTCOME
+State realistic timelines for each step and what outcome to expect.
+
+Note: This is legal awareness information only. Consult a qualified advocate for representation.
 
 Answer:"""
 
